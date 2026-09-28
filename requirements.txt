@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pydantic
+httpx
+splalchemy
+yfinance
+requests
+python-dotenv

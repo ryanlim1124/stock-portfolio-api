@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Portfolio Dashboard</title>
+    <style>
+:root {
+    --primary: #8b5cf6;    /* Purple buttons */
+    --background: #0f172a; /* Dark navy background */
+    --surface: #1e293b;    /* Slightly lighter dark cards */
+    --text: #f8fafc;       /* White text */
+    --text-light: #94a3b8; /* Dimmed gray text */
+    --success: #22c55e;    /* Bright green for gains */
+    --danger: #ef4444;     /* Bright red for losses */
+    --border: #334155;     /* Dark borders */
+}
+       body {
+    /* Try a cleaner, geometric font style */
+    font-family: 'Trebuchet MS', 'Century Gothic', Arial, sans-serif;
+    background-color: var(--background);
+    color: var(--text);
+    margin: 0;
+    padding: 2rem;
+    line-height: 1.5;
+}
+        .container { max-width: 1000px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+        h1, h2, h3 { margin: 0; color: var(--text); }
+        .card {
+    background: var(--surface);
+    border-radius: 16px; /* Increased from 8px to 16px for rounder corners */
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1); /* Slightly softer shadow */
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border);
+}
+        .api-key-section { display: flex; gap: 10px; align-items: center; }
+        input[type="password"], input[type="text"], input[type="number"] {
+            padding: 0.5rem;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: opacity 0.2s;
+        }
+        button:hover { opacity: 0.9; }
+        button.danger { background: var(--danger); }
+        button.success { background: var(--success); }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem; }
+        .stat-box { background: var(--background); padding: 1rem; border-radius: 6px; text-align: center; }
+        .stat-value { font-size: 1.5rem; font-weight: bold; margin-top: 0.5rem; }
+        .positive { color: var(--success); }
+        .negative { color: var(--danger); }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background: var(--background); color: var(--text-light); font-weight: 600; }
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 1rem; align-items: end; margin-top: 1rem; }
+        .error-message { color: var(--danger); margin-top: 1rem; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Portfolio Dashboard</h1>
+            <div class="api-key-section">
+                <label for="api-key" style="font-size: 0.875rem; color: var(--text-light);">API Key:</label>
+                <input type="password" id="api-key" placeholder="Enter dev-secret-key" value="dev-secret-key">
+            </div>
+        </div>
+
+        <div id="error-box" class="card error-message"></div>
+
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Portfolio Summary</h2>
+                <button onclick="refreshAllPrices()" class="success">Refresh All Market Prices</button>
+            </div>
+            <div class="summary-grid">
+                <div class="stat-box">
+                    <div style="color: var(--text-light);">Total Value</div>
+                    <div id="total-value" class="stat-value">$0.00</div>
+                </div>
+                <div class="stat-box">
+                    <div style="color: var(--text-light);">Total Gain/Loss</div>
+                    <div id="total-gain" class="stat-value">$0.00</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Add New Stock</h2>
+            <form id="add-stock-form" class="form-grid">
+                <div>
+                    <label style="display:block; margin-bottom:0.5rem;">Ticker Symbol</label>
+                    <input type="text" id="ticker" placeholder="e.g. AAPL" required style="width: 100%; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="display:block; margin-bottom:0.5rem;">Number of Shares</label>
+                    <input type="number" id="shares" placeholder="e.g. 10" step="any" required style="width: 100%; box-sizing: border-box;">
+                </div>
+                <div>
+                    <label style="display:block; margin-bottom:0.5rem;">Average Buy Price ($)</label>
+                    <input type="number" id="buy-price" placeholder="e.g. 150.50" step="any" required style="width: 100%; box-sizing: border-box;">
+                </div>
+                <button type="submit">Add to Portfolio</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Your Stocks</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Ticker</th>
+                        <th>Shares</th>
+                        <th>Buy Price</th>
+                        <th>Current Price</th>
+                        <th>Market Value</th>
+                        <th>Gain/Loss</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="stocks-body">
+                    <!-- Rows will be injected here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Utility function to format currency
+        const formatMoney = (amount) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+        
+        // Utility function to format percentage
+        const formatPercent = (amount) => new Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDigits: 2 }).format(amount / 100);
+
+        // Core function to interact with your FastAPI backend
+        async function apiCall(endpoint, method = 'GET', body = null) {
+            const apiKey = document.getElementById('api-key').value;
+            const errorBox = document.getElementById('error-box');
+            errorBox.style.display = 'none';
+
+            const headers = { 'Accept': 'application/json' };
+            if (apiKey) headers['X-API-Key'] = apiKey;
+            if (body) headers['Content-Type'] = 'application/json';
+
+            const options = { method, headers };
+            if (body) options.body = JSON.stringify(body);
+
+            try {
+                const response = await fetch(endpoint, options);
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.detail || `HTTP error ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                errorBox.innerText = `Error: ${error.message}`;
+                errorBox.style.display = 'block';
+                throw error;
+            }
+        }
+
+        // Fetch and display the portfolio summary
+        async function loadSummary() {
+            try {
+                const summary = await apiCall('/portfolio/summary');
+                document.getElementById('total-value').innerText = formatMoney(summary.total_value);
+                
+                const gainEl = document.getElementById('total-gain');
+                gainEl.innerText = `${formatMoney(summary.total_gain_loss)} (${formatPercent(summary.total_gain_loss_pct)})`;
+                
+                if (summary.total_gain_loss >= 0) {
+                    gainEl.className = 'stat-value positive';
+                } else {
+                    gainEl.className = 'stat-value negative';
+                }
+            } catch (error) {
+                console.error("Failed to load summary", error);
+            }
+        }
+
+        // Fetch and display individual stocks in the table
+        async function loadStocks() {
+            try {
+                const stocks = await apiCall('/stocks');
+                const tbody = document.getElementById('stocks-body');
+                tbody.innerHTML = '';
+
+                if (stocks.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #64748b;">No stocks added yet.</td></tr>';
+                    return;
+                }
+
+                stocks.forEach(stock => {
+                    const isPositive = stock.gain_loss >= 0;
+                    const gainColor = isPositive ? 'var(--success)' : 'var(--danger)';
+                    const gainText = `${formatMoney(stock.gain_loss)} (${formatPercent(stock.gain_loss_pct)})`;
+
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td style="font-weight: bold;">${stock.ticker}</td>
+                        <td>${stock.shares}</td>
+                        <td>${formatMoney(stock.buy_price)}</td>
+                        <td>${formatMoney(stock.current_price)}</td>
+                        <td>${formatMoney(stock.market_value)}</td>
+                        <td style="color: ${gainColor}; font-weight: 500;">${gainText}</td>
+                        <td>
+                            <button onclick="refreshPrice('${stock.ticker}')" style="background: var(--background); color: var(--text); border: 1px solid var(--border); padding: 0.25rem 0.5rem; font-size: 0.875rem;">Refresh</button>
+                            <button onclick="deleteStock('${stock.ticker}')" class="danger" style="padding: 0.25rem 0.5rem; font-size: 0.875rem;">Drop</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error("Failed to load stocks", error);
+            }
+        }
+
+        // Add a new stock
+        document.getElementById('add-stock-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const ticker = document.getElementById('ticker').value.toUpperCase();
+            const shares = parseFloat(document.getElementById('shares').value);
+            const buy_price = parseFloat(document.getElementById('buy-price').value);
+
+            try {
+                await apiCall('/stocks', 'POST', { ticker, shares, buy_price });
+                document.getElementById('add-stock-form').reset();
+                refreshData();
+            } catch (error) {
+                // Error already handled by apiCall helper
+            }
+        });
+
+        // Delete a stock
+        async function deleteStock(ticker) {
+            if (!confirm(`Are you sure you want to remove ${ticker} from your portfolio?`)) return;
+            try {
+                await apiCall(`/stocks/${ticker}`, 'DELETE');
+                refreshData();
+            } catch (error) {}
+        }
+
+        // Refresh a single stock's price
+        async function refreshPrice(ticker) {
+            try {
+                await apiCall(`/stocks/${ticker}/refresh-price`, 'POST');
+                refreshData();
+            } catch (error) {}
+        }
+
+        // Refresh all stock prices
+        async function refreshAllPrices() {
+            try {
+                await apiCall('/portfolio/refresh-all-prices', 'POST');
+                refreshData();
+            } catch (error) {}
+        }
+
+        // Helper to update everything on the page
+        function refreshData() {
+            loadStocks();
+            loadSummary();
+        }
+
+        // Initial load when page opens
+        refreshData();
+    </script>
+</body>
+</html>
